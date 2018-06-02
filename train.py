@@ -6,6 +6,7 @@ from __future__ import print_function
 import collections
 import math
 import os
+import re
 import random
 from tempfile import gettempdir
 
@@ -29,8 +30,9 @@ def create_vocabulary(text):
     words = text.split()
     result = []
     for i, word in enumerate(words):
-        processed_word = word.strip(',;:\'"-.!?0123456789([{|}])@#$%^&*').lower()
-        if len(processed_word):
+        processed_word = word.strip().lower()
+        processed_word = re.sub("[^а-яєіїґ'\-]", '', processed_word)
+        if len(processed_word) and processed_word != '-' and processed_word != "'":
             result.append(processed_word)
     return result
 

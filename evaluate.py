@@ -41,4 +41,16 @@ with tf.Session() as sess:
         nearest_words = [reversed_dictionary[id] for id in nearest]
         print('Nearest to {0}: {1}'.format(word, ', '.join(nearest_words)))
 
+    print('Write search queries (type q for quit):')
+    query = input('query = ')
+    while query != 'q':
+        query = query.lower()
+        if dictionary.get(query, -1) != -1:
+            nearest = get_nearest(normalized_embeddings, query)
+            nearest_words = [reversed_dictionary[id] for id in nearest]
+            print('Nearest to {0}: {1}'.format(query, ', '.join(nearest_words)))
+        else:
+            print('unknown word')
+        query = input('query = ')
+
 print('success')
