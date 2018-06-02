@@ -13,6 +13,7 @@ from tempfile import gettempdir
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+#import pymorphy2
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
@@ -26,18 +27,26 @@ def read_files():
     return result
 
 
+def read_stopwords():
+    with open('data/stopwords_ua', 'r') as file:
+        return file.read().split()
+
+
 def create_vocabulary(text):
     words = text.split()
     result = []
     for i, word in enumerate(words):
         processed_word = word.strip().lower()
-        processed_word = re.sub("[^а-яєіїґ'\-]", '', processed_word)
-        if len(processed_word) and processed_word != '-' and processed_word != "'":
+        processed_word = re.sub('[^а-яєіїґ\-]', '', processed_word)
+        if len(processed_word) and processed_word not in stopwords:
+            #processed_word = morph.parse(processed_word)[0].normal_form;
             result.append(processed_word)
     return result
 
 
 text = read_files()
+stopwords = read_stopwords()
+#morph = pymorphy2.MorphAnalyzer(lang='uk')
 vocabulary = create_vocabulary(text)
 
 
@@ -98,9 +107,9 @@ for i in range(8):
 
 # Step 4: Build and train a skip-gram model.
 
-batch_size = 128
+batch_size = 32
 embedding_size = 128  # Dimension of the embedding vector.
-skip_window = 1  # How many words to consider left and right.
+skip_window = 2  # How many words to consider left and right.
 num_skips = 2  # How many times to reuse an input to generate a label.
 num_sampled = 64  # Number of negative examples to sample.
 
@@ -158,7 +167,7 @@ with graph.as_default():
 
     # Construct the SGD optimizer using a learning rate of 1.0.
     with tf.name_scope('optimizer'):
-        optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
+        optimizer = tf.train.GradientDescentOptimizer(0.3).minimize(loss)
 
     # Compute the cosine similarity between minibatch examples and all embeddings.
     norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
@@ -178,7 +187,7 @@ with graph.as_default():
     saver = tf.train.Saver()
 
 # Step 5: Begin training.
-num_steps = 100001
+num_steps = 200001
 
 with tf.Session(graph=graph) as session:
     # Open a writer to write summaries.
