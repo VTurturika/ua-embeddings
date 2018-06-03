@@ -1,8 +1,19 @@
+import argparse
+import sys
 import tensorflow as tf
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument('text', metavar='text', type=str, help='wiki|potter')
+args = parser.parse_args()
+
+if args.text != 'wiki' and args.text != 'potter':
+    print('usage: python train.py wiki|potter')
+    sys.exit(0)
+
+
 def read_dictionary():
-    with open('log/potter/metadata.tsv', 'r') as file:
+    with open('log/{0}/metadata.tsv'.format(args.text), 'r') as file:
         words = file.read().split()
         dictionary = {}
         for (i, word) in enumerate(words):
@@ -12,7 +23,7 @@ def read_dictionary():
 
 
 def get_test_words():
-    with open('log/potter/test_words.txt', 'r') as file:
+    with open('data/{0}/test_words'.format(args.text), 'r') as file:
         return file.read().split()
 
 
@@ -31,19 +42,20 @@ def get_nearest(embeddings, word=None, embedding=None):
 
 
 with tf.Session() as sess:
-    saver = tf.train.import_meta_graph('log/potter/model.ckpt.meta')
-    saver.restore(sess, 'log/potter/model.ckpt')
+    saver = tf.train.import_meta_graph('log/{0}/model.ckpt.meta'.format(args.text))
+    saver.restore(sess, 'log/{0}/model.ckpt'.format(args.text))
 
     embeddings = tf.get_variable_scope().global_variables()[0]
     norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keepdims=True))
     normalized_embeddings = embeddings / norm
 
-    harry = tf.nn.embedding_lookup(embeddings, [dictionary['гаррі']])
-    he = tf.nn.embedding_lookup(embeddings, [dictionary['він']])
-    she = tf.nn.embedding_lookup(embeddings, [dictionary['вона']])
-    nearest = get_nearest(normalized_embeddings, embedding=harry-he+she)
-    nearest_words = [reversed_dictionary[id] for id in nearest]
-    print('Nearest to гаррі - він + вона: {0}'.format(', '.join(nearest_words)))
+    if args.text == 'potter':
+        harry = tf.nn.embedding_lookup(embeddings, [dictionary['гаррі']])
+        he = tf.nn.embedding_lookup(embeddings, [dictionary['він']])
+        she = tf.nn.embedding_lookup(embeddings, [dictionary['вона']])
+        nearest = get_nearest(normalized_embeddings, embedding=harry - he + she)
+        nearest_words = [reversed_dictionary[id] for id in nearest]
+        print('Nearest to гаррі - він + вона: {0}'.format(', '.join(nearest_words)))
 
     test_words = get_test_words()
     for word in test_words:

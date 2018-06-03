@@ -1,4 +1,3 @@
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -8,27 +7,41 @@ import math
 import os
 import re
 import random
-from tempfile import gettempdir
+import argparse
+import sys
 
 import numpy as np
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
-#import pymorphy2
-
+import pymorphy2
+from six.moves import xrange  # pylint: disable=redefined-builtin
 from tensorflow.contrib.tensorboard.plugins import projector
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('text', metavar='text', type=str, help='wiki|potter')
+args = parser.parse_args()
+
+if args.text != 'wiki' and args.text != 'potter':
+    print('usage: python train.py wiki|potter')
+    sys.exit(0)
 
 
 def read_files():
     result = ''
-    for i in range(1, 7):
-        filename = 'text/potter_' + str(i) + '.txt'
-        with open(filename, 'r') as file:
+    files = []
+    for (_, _, filenames) in os.walk('text/' + args.text):
+        files.extend(filenames)
+        break
+    for filename in files:
+        with open('text/{0}/{1}'.format(args.text, filename), 'r') as file:
             result += file.read()
+    print('Loaded all text files')
     return result
 
 
 def read_stopwords():
     with open('data/stopwords_ua', 'r') as file:
+        print('Loaded stopwords')
         return file.read().split()
 
 
@@ -37,16 +50,18 @@ def create_vocabulary(text):
     result = []
     for i, word in enumerate(words):
         processed_word = word.strip().lower()
-        processed_word = re.sub('[^а-яєіїґ\-]', '', processed_word)
+        processed_word = re.sub('[^а-яєіїґ]', '', processed_word)
         if len(processed_word) and processed_word not in stopwords:
-            #processed_word = morph.parse(processed_word)[0].normal_form;
+            processed_word = morph.parse(processed_word)[0].normal_form
             result.append(processed_word)
+    print('Created vocabulary from raw text')
+    print('Total words number = ', len(result))
     return result
 
 
 text = read_files()
 stopwords = read_stopwords()
-#morph = pymorphy2.MorphAnalyzer(lang='uk')
+morph = pymorphy2.MorphAnalyzer(lang='uk')
 vocabulary = create_vocabulary(text)
 
 
@@ -61,16 +76,18 @@ def build_dataset(words):
         index = dictionary[word]
         data.append(index)
     reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
-    return data, count, dictionary, reversed_dictionary
+    print('Created training dataset')
+    vocabulary_size = len(count)
+    print('vocabulary size = ', vocabulary_size)
+    return data, count, vocabulary_size, dictionary, reversed_dictionary
 
 
-data, count, dictionary, reverse_dictionary = build_dataset(vocabulary)
-vocabulary_size = len(count)
+data, count, vocabulary_size, dictionary, reverse_dictionary = build_dataset(vocabulary)
 data_index = 0
-log_dir = 'log/potter'
+log_dir = 'log/' + args.text
 
 
-# Step 3: Function to generate a training batch for the skip-gram model.
+# Function to generate a training batch for the skip-gram model.
 def generate_batch(batch_size, num_skips, skip_window):
     global data_index
     assert batch_size % num_skips == 0
@@ -105,13 +122,14 @@ for i in range(8):
     print(batch[i], reverse_dictionary[batch[i]], '->', labels[i, 0],
           reverse_dictionary[labels[i, 0]])
 
-# Step 4: Build and train a skip-gram model.
+# Build and train a skip-gram model.
 
 batch_size = 32
 embedding_size = 128  # Dimension of the embedding vector.
 skip_window = 2  # How many words to consider left and right.
 num_skips = 2  # How many times to reuse an input to generate a label.
 num_sampled = 64  # Number of negative examples to sample.
+learning_rate = 0.3
 
 # We pick a random validation set to sample nearest neighbors. Here we limit the
 # validation samples to the words that have a low numeric ID, which by
@@ -165,12 +183,12 @@ with graph.as_default():
     # Add the loss value as a scalar to summary.
     tf.summary.scalar('loss', loss)
 
-    # Construct the SGD optimizer using a learning rate of 1.0.
+    # Construct the SGD optimizer using a learning rate
     with tf.name_scope('optimizer'):
-        optimizer = tf.train.GradientDescentOptimizer(0.3).minimize(loss)
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
 
     # Compute the cosine similarity between minibatch examples and all embeddings.
-    norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+    norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keepdims=True))
     normalized_embeddings = embeddings / norm
     valid_embeddings = tf.nn.embedding_lookup(normalized_embeddings,
                                               valid_dataset)
@@ -195,8 +213,17 @@ with tf.Session(graph=graph) as session:
 
     # We must initialize all variables before we use them.
     init.run()
-    print('Initialized')
+    print('Initialized tensorflow session')
+    print('\nTraining params:')
+    print('batch size =', batch_size)
+    print('embedding size = ', embedding_size)
+    print('skip window = ', skip_window)
+    print('num skips = ', num_skips)
+    print('negative examples  = ', num_sampled)
+    print('learning rate = ', learning_rate)
+    print('training steps = ', num_steps)
 
+    print('Start training\n')
     average_loss = 0
     for step in xrange(num_steps):
         batch_inputs, batch_labels = generate_batch(batch_size, num_skips,
@@ -255,7 +282,7 @@ with tf.Session(graph=graph) as session:
     config = projector.ProjectorConfig()
     embedding_conf = config.embeddings.add()
     embedding_conf.tensor_name = embeddings.name
-    embedding_conf.metadata_path = os.path.join(log_dir, 'metadata.tsv')
+    embedding_conf.metadata_path = 'metadata.tsv'
     projector.visualize_embeddings(writer, config)
 
 writer.close()
@@ -288,12 +315,12 @@ try:
     from sklearn.manifold import TSNE
     import matplotlib.pyplot as plt
 
-    tsne = TSNE(
-        perplexity=30, n_components=2, init='pca', n_iter=5000, method='exact')
-    plot_only = 500
+    print('Creating TSNE chart')
+    tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000, method='exact')
+    plot_only = 300
     low_dim_embs = tsne.fit_transform(final_embeddings[:plot_only, :])
     labels = [reverse_dictionary[i] for i in xrange(plot_only)]
-    plot_with_labels(low_dim_embs, labels, os.path.join(gettempdir(), 'tsne.png'))
+    plot_with_labels(low_dim_embs, labels, 'tsne/{0}.png'.format(args.text))
 
 except ImportError as ex:
     print('Please install sklearn, matplotlib, and scipy to show embeddings.')
