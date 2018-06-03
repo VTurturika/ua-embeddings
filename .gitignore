@@ -5,6 +5,5 @@ log/*
 !log/potter/.gitkeep
 
 text/*
-!text/.gitkeep
 !text/wiki/.gitkeep
 !text/potter/.gitkeep
