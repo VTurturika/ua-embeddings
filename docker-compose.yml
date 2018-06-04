@@ -1,0 +1,9 @@
+version: "2"
+services:
+    embeddings:
+        build:  '.'
+        restart: on-failure
+        ports:
+            - '80:6006'
+        volumes:
+            - './log:/embeddings/log'
